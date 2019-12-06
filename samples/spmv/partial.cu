@@ -26,12 +26,13 @@ struct SPMVFunctor {
     atomicAdd(gdata->next + dst, gdata->cur[src] * gdata->weight[eid]);
   }
   static __device__ __forceinline__ void ApplyEdgeReduce(
-    int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {}
+    int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {}
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return 1;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return gdata->next;
+
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return 1 * oid;
   }
 };
 
@@ -77,7 +78,7 @@ int main(int argc, char** argv) {
   minigun::IntCsr csr_t;
   auto pack = utils::ToReverseCsr(csr, csr_mapping, kDLGPU);
   csr_t = pack.first;
-  minigun::IntArray csr_t_mapping = pack.second;
+  // minigun::IntArray csr_t_mapping = pack.second;
   minigun::IntCoo coo;
   coo = utils::ToCoo(csr, kDLGPU);
   minigun::IntSpMat spmat = {&csr, &csr_t, &coo};

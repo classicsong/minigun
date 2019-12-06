@@ -37,12 +37,12 @@ struct MaskedMMFunctor {
     }
   }
   static __device__ __forceinline__ void ApplyEdgeReduce(
-    int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {}
+    int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {}
   static __device__ __forceinline__ int32_t GetFeatSize(GData *gdata) {
     return -1;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return nullptr;
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return 0;
   }
 };
 

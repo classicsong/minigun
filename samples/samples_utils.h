@@ -25,11 +25,14 @@ void VecPrint(const std::vector<T>& vec) {
 template<typename T>
 bool VecEqual(const std::vector<T>& v1,
            const std::vector<T>& v2) {
-  if (v1.size() != v2.size()) return false;
+  if (v1.size() != v2.size()) {
+    std::cout << v1.size() << " vs " << v2.size() << std::endl;
+    return false;
+  }
   for (size_t i = 0; i < v1.size(); ++i) {
     if (!(FCLOSE(v1[i], v2[i]))) {
+      std::cout << "@" << i << ": " << v1[i] << " v.s. " << v2[i] << std::endl;
       return false;
-      //std::cout << "@" << i << ": " << v1[i] << " v.s. " << v2[i] << std::endl;
     }
   }
   return true;

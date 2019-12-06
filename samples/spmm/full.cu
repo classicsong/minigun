@@ -24,14 +24,24 @@ struct SPMMFunctor {
   static __device__ __forceinline__ void ApplyEdge(
       int32_t src, int32_t dst, int32_t eid, GData* gdata) {}
   static __device__ __forceinline__ void ApplyEdgeReduce(
-      int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {
-      val += gdata->cur[src * gdata->dim + feat_idx] * gdata->weight[gdata->eid_mapping[eid]];
+      int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {
+    int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t stride_x = blockDim.x * gridDim.x;
+    const int D = gdata->dim;
+    float* outbuf = gdata->next + outoff;
+
+    while (tx < D) {
+      float* outaddr = outbuf + tx;
+      *outaddr += gdata->cur[src * D + tx] * gdata->weight[gdata->eid_mapping[eid]];
+      tx += stride_x;
+    }
   }
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return gdata->dim;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return gdata->next;
+
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return gdata->dim * oid;
   }
 };
 

@@ -29,15 +29,24 @@ struct EdgeMax {
   static __device__ __forceinline__ void ApplyEdge(
       int32_t src, int32_t dst, int32_t eid, GData* gdata) {}
   static __device__ __forceinline__ void ApplyEdgeReduce(
-      int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {
+      int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {
+    int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t stride_x = blockDim.x * gridDim.x;
     const int32_t dim = gdata->dim;
-    val = max(val, gdata->score[gdata->eid_mapping[eid] * dim + feat_idx]);
+    float* outbuf = gdata->max + outoff;
+
+    while (tx < dim) {
+      float *outaddr = outbuf + tx;
+      *outaddr = max(*outaddr, gdata->score[gdata->eid_mapping[eid] * dim + tx]);
+      tx += stride_x;
+    }
   }
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return gdata->dim;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return gdata->max;
+
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return gdata->dim * oid;
   }
 };
 
@@ -50,17 +59,26 @@ struct MinuxMaxExpSum {
   static __device__ __forceinline__ void ApplyEdge(
       int32_t src, int32_t dst, int32_t eid, GData* gdata) {}
   static __device__ __forceinline__ void ApplyEdgeReduce(
-      int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {
-    const int dim = gdata->dim;
-    gdata->score[gdata->eid_mapping[eid] * dim + feat_idx] =
-        expf(gdata->score[gdata->eid_mapping[eid] * dim + feat_idx] - gdata->max[dst * dim + feat_idx]);
-    val += gdata->score[gdata->eid_mapping[eid] * dim + feat_idx];
+      int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {
+    int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t stride_x = blockDim.x * gridDim.x;
+    const int32_t dim = gdata->dim;
+    float* outbuf = gdata->sum + outoff;
+
+    while (tx < dim) {
+      float *outaddr = outbuf + tx;
+      gdata->score[gdata->eid_mapping[eid] * dim + tx] =
+          expf(gdata->score[gdata->eid_mapping[eid] * dim + tx] - gdata->max[dst * dim + tx]);
+      *outaddr += gdata->score[gdata->eid_mapping[eid] * dim + tx];
+      tx += stride_x;
+    }
   }
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return gdata->dim;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return gdata->sum;
+
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return gdata->dim * oid;
   }
 };
 
@@ -81,12 +99,12 @@ struct Norm {
     }
   }
   static __device__ __forceinline__ void ApplyEdgeReduce(
-      int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {}
+      int32_t src, int32_t dst, int32_t eid,  int32_t outoff, GData* gdata) {}
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return -1;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return nullptr;
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return 0;
   }
 };
 

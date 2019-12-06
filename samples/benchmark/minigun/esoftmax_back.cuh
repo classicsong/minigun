@@ -26,21 +26,28 @@ struct BackSoftmaxAccum {
     int32_t src, int32_t dst, int32_t eid, GData* gdata) {}
   // accum: (N, H)
   static __device__ __forceinline__ void ApplyEdgeReduce(
-    int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {
+    int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {
+    int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t stride_x = blockDim.x * gridDim.x;
     const int H = gdata->H;
     // each thread handles one attention head
     float* score_off = gdata->score + gdata->eid_mapping[eid] * H;
     float* grad_score_off = gdata->grad_score + gdata->eid_mapping[eid] * H;
     float* ret_off = gdata->out + gdata->eid_mapping[eid] * H;
-    float sds = __ldg(score_off + feat_idx) * __ldg(grad_score_off + feat_idx);
-    val += sds;
-    *(ret_off + feat_idx) = sds;
+    float* out_off = gdata->accum + outoff;
+
+    while (tx < H) {
+      float sds = __ldg(score_off + tx) * __ldg(grad_score_off + tx);
+      *(out_off + tx) += sds;
+      *(ret_off + tx) = sds;
+      tx += stride_x;
+    }    
   }
   static __device__ __forceinline__ int32_t GetFeatSize(GData *gdata) {
     return gdata->H;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return gdata->accum;
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return gdata->H * oid;
   }
 };
 
@@ -53,19 +60,25 @@ struct BackSoftmaxMinus {
     int32_t src, int32_t dst, int32_t eid, GData* gdata) {}
   // accum: (N, H)
   static __device__ __forceinline__ void ApplyEdgeReduce(
-    int32_t src, int32_t dst, int32_t eid, int32_t feat_idx, float& val, GData* gdata) {
+    int32_t src, int32_t dst, int32_t eid, int32_t outoff, GData* gdata) {
+    int64_t tx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int64_t stride_x = blockDim.x * gridDim.x;
     const int H = gdata->H;
     // each thread handles one attention head
     float* score_off = gdata->score + gdata->eid_mapping[eid] * H;
     float* accum_off = gdata->accum + dst * H;
     float* ret_off = gdata->out + gdata->eid_mapping[eid] * H;
-    *(ret_off + feat_idx) -= __ldg(score_off + feat_idx) * __ldg(accum_off + feat_idx);
+
+    while (tx < H) {
+      *(ret_off + tx) -= __ldg(score_off + tx) * __ldg(accum_off + tx);
+      tx += stride_x;
+    }
   }
   static __device__ __forceinline__ int32_t GetFeatSize(GData* gdata) {
     return gdata->H;
   }
-  static __device__ __forceinline__ float* GetOutBuf(GData* gdata) {
-    return nullptr;
+  static __device__ __forceinline__ int32_t GetOutOff(int32_t oid, GData* gdata) {
+    return 0;
   }
 };
 
