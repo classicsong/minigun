@@ -25,8 +25,8 @@ __global__ void CudaAdvanceAllGunrockLBOutKernel(
   Idx stride_y = blockDim.y * gridDim.y;
   Idx eid = ty;
   while (eid < coo.column.length) {
-    Idx src = _ldg(coo.row.data + eid);
-    Idx dst = _ldg(coo.column.data + eid);
+    const Idx src = _ldg(coo.row.data + eid);
+    const Idx dst = _ldg(coo.column.data + eid);
     if (Functor::CondEdge(src, dst, eid, &gdata)) {
       Functor::ApplyEdge(src, dst, eid, &gdata);
       // Add dst/eid to output frontier
@@ -82,21 +82,31 @@ __global__ void CudaAdvanceAllNodeParallelKernel(
     Csr<Idx> csr,
     GData gdata) {
   Idx ty = blockIdx.y * blockDim.y + threadIdx.y;
+  Idx tx = blockIdx.x * blockDim.x + threadIdx.x;
   Idx stride_y = blockDim.y * gridDim.y;
+  Idx stride_x = blockDim.x * gridDim.x;
+  Idx feat_size = Functor::GetFeatSize(&gdata);
+  DType *outbuf = Functor::GetOutBuf(&gdata);
+  DType val;
   if (Config::kParallel == kDst) {
     Idx dst = ty;
     while (dst < csr.row_offsets.length - 1) {
       Idx start = _ldg(csr.row_offsets.data + dst);
       Idx end = _ldg(csr.row_offsets.data + dst + 1);
-      Idx outoff = Functor::GetOutOff(dst, &gdata);
-      for (Idx eid = start; eid < end; ++eid) {
-        Idx src = _ldg(csr.column_indices.data + eid);
-
-        if (Functor::CondEdge(src, dst, eid, &gdata)) {
-          Functor::ApplyEdgeReduce(src, dst, eid, outoff, &gdata);
+      Idx feat_idx = tx;
+      while (feat_idx < feat_size) {
+        Idx outoff = Functor::GetOutOffset(dst, &gdata) * feat_size + feat_idx;
+        if (outbuf != nullptr)
+          val = _ldg(outbuf + outoff);
+        for (Idx eid = start; eid < end; ++eid) {
+          Idx src = _ldg(csr.column_indices.data + eid);
+          if (Functor::CondEdge(src, dst, eid, &gdata))
+            Functor::ApplyEdgeReduce(src, dst, eid, feat_idx, val, &gdata);
         }
+        if (outbuf != nullptr)
+          outbuf[outoff] = val;
+        feat_idx += stride_x;
       }
-
       dst += stride_y;
     }
   } else {
@@ -104,13 +114,20 @@ __global__ void CudaAdvanceAllNodeParallelKernel(
     while (src < csr.row_offsets.length - 1) {
       Idx start = _ldg(csr.row_offsets.data + src);
       Idx end = _ldg(csr.row_offsets.data + src + 1);
-      Idx outoff = Functor::GetOutOff(src, &gdata);
-      for (Idx eid = start; eid < end; ++eid) {
-        Idx dst = _ldg(csr.column_indices.data + eid);
-        if (Functor::CondEdge(src, dst, eid, &gdata))
-          Functor::ApplyEdgeReduce(src, dst, eid, outoff, &gdata);
+      Idx feat_idx = tx;
+      while (feat_idx < feat_size) {
+        Idx outoff = Functor::GetOutOffset(src, &gdata) * feat_size + feat_idx;
+        if (outbuf != nullptr)
+          val = _ldg(outbuf + outoff);
+        for (Idx eid = start; eid < end; ++eid) {
+          Idx dst = _ldg(csr.column_indices.data + eid);
+          if (Functor::CondEdge(src, dst, eid, &gdata))
+            Functor::ApplyEdgeReduce(src, dst, eid, feat_idx, val, &gdata);
+        }
+        if (outbuf != nullptr)
+          outbuf[outoff] = val;
+        feat_idx += stride_x;
       }
-
       src += stride_y;
     }
   }
