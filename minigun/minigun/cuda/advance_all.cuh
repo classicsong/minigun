@@ -70,7 +70,8 @@ __global__ void CudaAdvanceAllNodeParallelKernel(
   Idx stride_x = blockDim.x * gridDim.x;
   Idx feat_size = Functor::GetFeatSize(&gdata);
   DType *outbuf = Functor::GetOutBuf(&gdata);
-  DType val;
+  Idx step_len = Functor::GetStepLen(&gdata);
+  DType *val;
   Idx vid = ty;
   while (vid < csr.row_offsets.length - 1) {
     Idx start = _ldg(csr.row_offsets.data + vid);
@@ -80,7 +81,7 @@ __global__ void CudaAdvanceAllNodeParallelKernel(
       while (feat_idx < feat_size) {
         Idx outoff = Functor::GetOutOffset(vid, &gdata) * feat_size + feat_idx;
         if (outbuf != nullptr)
-          val = _ldg(outbuf + outoff);
+          val = outbuf + outoff * step_len;
         for (Idx eid = start; eid < end; ++eid) {
           Idx src, dst;
           if (Config::kParallel == kDst) {
@@ -91,10 +92,9 @@ __global__ void CudaAdvanceAllNodeParallelKernel(
             src = vid;
           }
           if (Functor::CondEdge(src, dst, eid, &gdata))
-            Functor::ApplyEdgeReduce(src, dst, eid, feat_idx, &val, &gdata);
+            Functor::ApplyEdgeReduce(src, dst, eid, feat_idx, val, &gdata);
         }
-        if (outbuf != nullptr)
-          outbuf[outoff] = val;
+
         feat_idx += stride_x;
       }
     }
